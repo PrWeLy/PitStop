@@ -1,27 +1,41 @@
+function bindAuthForm(formId, errorId, endpoint, readData) {
+    const form = byId(formId);
+    const errorMessage = byId(errorId);
+    const submit = form.querySelector('button[type="submit"]');
 
-const loginForm = document.getElementById("loginForm");
-const registerForm = document.getElementById("registerForm");
+    form.addEventListener("submit", async event => {
+        event.preventDefault();
+        if (submit.disabled) return;
+        setError(errorMessage);
+        submit.disabled = true;
 
+        try {
+            await apiRequest(endpoint, { method: "POST", data: readData() });
+            window.location.assign("/dashboard.html");
+        } catch (error) {
+            setError(errorMessage, error.message);
+            submit.disabled = false;
+        }
+    });
+}
 
-loginForm.addEventListener("submit", function(event) {
-    event.preventDefault();
+bindAuthForm("loginForm", "loginError", "login", () => ({
+    email: valueOf("loginEmail").trim(),
+    password: valueOf("loginPassword")
+}));
 
-    sessionStorage.setItem("pitstopDemoUser", "Guest");
-    window.location.href = "dashboard.html";
-});
-
-registerForm.addEventListener("submit", function(event) {
-    event.preventDefault();
-
-    const nickname = document.getElementById("registerNickname").value.trim();
-    const password = document.getElementById("registerPassword").value;
-    const confirmPassword = document.getElementById("confirmPassword").value;
-
-    if (password !== confirmPassword) {
-        alert("Passwords do not match!");
-        return;
+bindAuthForm("registerForm", "registerError", "register", () => {
+    const password = valueOf("registerPassword");
+    if (password !== valueOf("confirmPassword")) {
+        throw new Error("Passwords do not match.");
     }
-
-    sessionStorage.setItem("pitstopDemoUser", nickname);
-    window.location.href = "dashboard.html";
+    return {
+        nickname: valueOf("registerNickname").trim(),
+        email: valueOf("registerEmail").trim(),
+        password
+    };
 });
+
+if (new URLSearchParams(window.location.search).has("login")) {
+    bootstrap.Modal.getOrCreateInstance(byId("loginModal")).show();
+}

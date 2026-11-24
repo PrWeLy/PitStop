@@ -1,311 +1,197 @@
-
-// SAYFA GEÇİŞLERİ
-
-// SAYFA GEÇİŞLERİ
-const dashboard = document.getElementById("dashboardContent");
-const garage = document.getElementById("garageContent");
-const maintenance = document.getElementById("maintenanceContent");
-const expenses = document.getElementById("expensesContent");
-const settings = document.getElementById("settingsContent");
-
-
-const dashboardLink = document.getElementById("dashboardLink");
-const garageLink = document.getElementById("garageLink");
-const maintenanceLink = document.getElementById("maintenanceLink");
-const expensesLink = document.getElementById("expensesLink");
-const settingsLink = document.getElementById("settingsLink");
-
-const sections = [
-    dashboard,garage,maintenance,expenses,settings
-];
-
-const links = [
-    dashboardLink,garageLink,maintenanceLink,expensesLink,settingsLink
-];
-
-function showPage(selectedSection, selectedLink) {
-    sections.forEach(function(section) {
-        section.classList.add("d-none");
+const sectionNames = ["dashboard", "garage", "maintenance", "expenses", "settings"];
+for (const name of sectionNames) {
+    byId(name + "Link").addEventListener("click", event => {
+        event.preventDefault();
+        for (const section of sectionNames) {
+            byId(section + "Content").classList.toggle("d-none", section !== name);
+            byId(section + "Link").classList.toggle("active", section === name);
+        }
     });
-
-    links.forEach(function(link) {
-        link.classList.remove("active");
-    });
-
-    selectedSection.classList.remove("d-none");
-    selectedLink.classList.add("active");
 }
 
-dashboardLink.addEventListener("click", function(event) {
-    event.preventDefault();
-    showPage(dashboard, dashboardLink);
-});
-
-garageLink.addEventListener("click", function(event) {
-    event.preventDefault();
-    showPage(garage, garageLink);
-});
-
-maintenanceLink.addEventListener("click", function(event) {
-    event.preventDefault();
-    showPage(maintenance, maintenanceLink);
-});
-
-expensesLink.addEventListener("click", function(event) {
-    event.preventDefault();
-    showPage(expenses, expensesLink);
-});
-settingsLink.addEventListener("click", function(event) {
-    event.preventDefault();
-    showPage(settings, settingsLink);
-});
-
-
-
-// ARAÇ EKLEME
-const vehicleForm = document.getElementById("addVehicleForm");
-const garageList = document.getElementById("garageList");
-const garageEmpty = document.getElementById("garageEmpty");
-const totalVehicles = document.getElementById("totalVehicles");
-
-const dashboardGarageList = document.getElementById("dashboardGarageList");
-const dashboardGarageEmpty = document.getElementById("dashboardGarageEmpty");
-
-let vehicleCount = 0;
-
-vehicleForm.addEventListener("submit", function(event) {
-    event.preventDefault();
-
-    const brand = document.getElementById("carBrand").value.trim();
-    const model = document.getElementById("carModel").value.trim();
-    const year = document.getElementById("carYear").value;
-    const mileage = document.getElementById("carMileage").value;
-    const plate = document.getElementById("carPlate").value.trim();
-
-    // GARAGE İÇİN KART
-    const column = document.createElement("div");
-    column.className = "col-md-6 col-xl-4";
-
-    const card = document.createElement("div");
-    card.className = "card bg-black text-white border-secondary p-4 h-100";
-
-    const icon = document.createElement("i");
-    icon.className = "fa-solid fa-car-side fa-2x text-primary mb-3";
-
-    const title = document.createElement("h5");
-    title.textContent = brand + " " + model;
-
-    const details = document.createElement("p");
-    details.className = "text-secondary mb-2";
-    details.textContent = year + " · " + Number(mileage).toLocaleString("tr-TR") + " km";
-
-    const plateText = document.createElement("small");
-    plateText.className = "text-secondary";
-    plateText.textContent = plate;
-
-    card.append(icon, title, details, plateText);
-    column.appendChild(card);
-    garageList.appendChild(column);
-
-    // DASHBOARD'DAKİ ARAÇ LİSTESİ
-    const vehicleRow = document.createElement("div");
-    vehicleRow.className = "border-bottom border-secondary pb-3 mb-3";
-
-    const vehicleName = document.createElement("h6");
-    vehicleName.textContent = brand + " " + model;
-
-    const vehicleDetails = document.createElement("small");
-    vehicleDetails.className = "text-secondary";
-    vehicleDetails.textContent = year + " · " + Number(mileage).toLocaleString("tr-TR") + " km";
-
-    vehicleRow.append(vehicleName, vehicleDetails);
-    dashboardGarageList.appendChild(vehicleRow);
-
-    // İSTATİSTİKLERİ GÜNCELLE
-    vehicleCount++;
-    totalVehicles.textContent = vehicleCount;
-
-    garageEmpty.classList.add("d-none");
-    dashboardGarageEmpty.classList.add("d-none");
-
-    // MODALI KAPAT VE FORMU TEMİZLE
-    bootstrap.Modal.getInstance(document.getElementById("addVehicleModal")).hide();
-    vehicleForm.reset();
-
-    
-});
-
-
-// MAINTENANCE KAYITLARI
-const maintenanceForm = document.getElementById("maintenanceForm");
+const vehicles = new Map();
 const maintenanceRecords = [];
+const money = new Intl.NumberFormat("tr-TR", {
+    style: "currency",
+    currency: "TRY",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2
+});
+const kilometers = new Intl.NumberFormat("tr-TR");
 
-// Bakım kaydını belirtilen bölüme ekler.
-function addMaintenanceCard(containerId, record) {
-    const container = document.getElementById(containerId);
-
-    if (!container) return;
-
-    // İlk kayıt eklenirken "No records yet" mesajını kaldır.
-    if (container.dataset.hasRecords !== "true") {
-        container.replaceChildren();
-        container.classList.remove("text-center", "py-4", "py-5");
-        container.dataset.hasRecords = "true";
-    }
-
-    const item = document.createElement("div");
-    item.className = "d-flex justify-content-between align-items-center gap-3 border-bottom border-secondary pb-3 mb-3";
-
-    const info = document.createElement("div");
-
-    const title = document.createElement("h6");
-    title.className = "mb-1";
-    title.textContent = record.type;
-
-    const details = document.createElement("small");
-    details.className = "text-secondary";
-    details.textContent = record.vehicle + " · " + record.date;
-
-    const cost = document.createElement("span");
-    cost.className = "text-primary fw-bold";
-    cost.textContent = "₺" + record.cost.toLocaleString("tr-TR");
-
-    info.append(title, details);
-    item.append(info, cost);
-
-    container.prepend(item);
+function element(tag, className, text = "") {
+    const node = document.createElement(tag);
+    node.className = className;
+    node.textContent = text;
+    return node;
 }
 
-// SAVE RECORD BUTONUNA BASILDIĞINDA
-maintenanceForm.addEventListener("submit", function(event) {
-    event.preventDefault();
+function vehicleName(vehicle) {
+    return vehicle.brand + " " + vehicle.model;
+}
 
-    const record = {
-        vehicle: document.getElementById("maintenanceVehicle").value.trim(),
-        type: document.getElementById("serviceType").value,
-        status: document.getElementById("serviceStatus").value,
-        date: document.getElementById("serviceDate").value,
-        mileage: Number(document.getElementById("serviceMileage").value),
-        cost: Number(document.getElementById("serviceCost").value) || 0,
-        notes: document.getElementById("serviceNotes").value.trim()
-    };
+function addVehicle(vehicle) {
+    vehicles.set(vehicle.id, vehicle);
+    const name = vehicleName(vehicle);
+    const details = vehicle.year + " · " + kilometers.format(vehicle.mileage) + " km";
+    const column = element("div", "col-md-6 col-xl-4");
+    const card = element("div", "card bg-black text-white border-secondary p-4 h-100");
+    card.append(
+        element("i", "fa-solid fa-car-side fa-2x text-primary mb-3"),
+        element("h5", "", name),
+        element("p", "text-secondary mb-2", details),
+        element("small", "text-secondary", vehicle.plate)
+    );
+    column.append(card);
+    byId("garageList").append(column);
 
-    maintenanceRecords.push(record);
+    const summary = element("div", "border-bottom border-secondary pb-3 mb-3");
+    summary.append(element("h6", "", name), element("small", "text-secondary", details));
+    byId("dashboardGarageList").append(summary);
 
-    renderExpenses();
+    byId("maintenanceVehicle").add(new Option(name + " · " + vehicle.plate, vehicle.id));
+    byId("garageEmpty").classList.add("d-none");
+    byId("dashboardGarageEmpty").classList.add("d-none");
+    byId("maintenanceVehicleHint").classList.add("d-none");
+    byId("saveMaintenance").disabled = false;
+    byId("totalVehicles").textContent = vehicles.size;
+}
 
-    if (record.status === "completed") {
+function maintenanceRow(record, showDetails) {
+    const row = element("div", "d-flex justify-content-between align-items-center gap-3 border-bottom border-secondary pb-3 mb-3");
+    const vehicle = vehicles.get(record.vehicle_id);
+    const info = element("div", "");
+    info.append(
+        element("h6", "mb-1", record.service_type),
+        element("small", "text-secondary", vehicleName(vehicle) + " · " + record.service_date)
+    );
+    if (showDetails) {
+        info.append(element("small", "d-block text-secondary", kilometers.format(record.mileage) + " km"));
+        if (record.notes) {
+            info.append(element("small", "d-block text-secondary text-break", record.notes));
+        }
+    }
+    row.append(info, element("span", "text-primary fw-bold", money.format(record.cost_cents / 100)));
+    return row;
+}
 
-        // Maintenance → Service History
-        addMaintenanceCard("serviceHistoryList", record);
+function renderMaintenance() {
+    const completed = maintenanceRecords.filter(record => record.status === "completed");
+    const scheduled = maintenanceRecords.filter(record => record.status === "scheduled");
 
-        // Dashboard → Recent Maintenance
-        addMaintenanceCard("recentMaintenanceList", record);
-
-    } else {
-
-        // Maintenance → Upcoming Services
-        addMaintenanceCard("scheduledServicesList", record);
-
-        // Dashboard → Upcoming Maintenance
-        addMaintenanceCard("upcomingMaintenanceList", record);
+    const lists = [
+        ["serviceHistoryList", completed, true],
+        ["recentMaintenanceList", completed, false],
+        ["scheduledServicesList", scheduled, true],
+        ["upcomingMaintenanceList", scheduled, false],
+        ["expensesList", completed, false]
+    ];
+    for (const [id, records, showDetails] of lists) {
+        const list = byId(id);
+        const empty = byId(id + "Empty");
+        list.replaceChildren(...records.map(record => maintenanceRow(record, showDetails)));
+        empty.classList.toggle("d-none", records.length > 0);
     }
 
-    // DASHBOARD SAYAÇLARINI GÜNCELLE
-    const completed = maintenanceRecords.filter(
-        item => item.status === "completed"
-    );
+    const totalCents = completed.reduce((sum, record) => sum + record.cost_cents, 0);
+    const total = money.format(totalCents / 100);
+    byId("totalExpenses").textContent = total;
+    byId("expensesPageTotal").textContent = total;
+    byId("completedServicesCount").textContent = completed.length;
+    byId("expensesPageCount").textContent = completed.length;
+    byId("upcomingServicesCount").textContent = scheduled.length;
+}
 
-    const scheduled = maintenanceRecords.filter(
-        item => item.status === "scheduled"
-    );
+function redirectIfSignedOut(error) {
+    if (error.status !== 401) return false;
+    window.location.replace("/?login=1");
+    return true;
+}
 
-    const totalCost = completed.reduce(
-        (sum, item) => sum + item.cost, 0
-    );
+function bindRecordForm({ formId, modalId, errorId, endpoint, readData, onSaved }) {
+    const form = byId(formId);
+    const submit = form.querySelector('button[type="submit"]');
+    const errorMessage = byId(errorId);
+    form.addEventListener("submit", async event => {
+        event.preventDefault();
+        if (submit.disabled) return;
+        setError(errorMessage);
+        submit.disabled = true;
 
-    document.getElementById("completedServicesCount").textContent = completed.length;
-    document.getElementById("upcomingServicesCount").textContent = scheduled.length;
-    document.getElementById("totalExpenses").textContent = "₺" + totalCost.toLocaleString("tr-TR");
-
-    // MODALI KAPAT
-    bootstrap.Modal.getInstance(
-        document.getElementById("addMaintenanceModal")
-    ).hide();
-
-    maintenanceForm.reset();
-});
-
-
-// EXPENSES SAYFASINI GÜNCELLE
-function renderExpenses() {
-
-    const completed = maintenanceRecords.filter(
-        record => record.status === "completed"
-    );
-
-    const total = completed.reduce(
-        (sum, record) => sum + record.cost, 0
-    );
-
-    document.getElementById("expensesPageTotal").textContent =
-        "₺" + total.toLocaleString("tr-TR");
-
-    document.getElementById("expensesPageCount").textContent =
-        completed.length;
-
-    const expensesList = document.getElementById("expensesList");
-    const expensesEmpty = document.getElementById("expensesEmpty");
-
-    expensesList.replaceChildren();
-
-    expensesEmpty.classList.toggle(
-        "d-none", completed.length > 0
-    );
-
-    completed.forEach(function(record) {
-
-        const item = document.createElement("div");
-        item.className =
-            "d-flex justify-content-between align-items-center gap-3 border-bottom border-secondary pb-3 mb-3";
-
-        const info = document.createElement("div");
-
-        const title = document.createElement("h6");
-        title.textContent = record.type;
-
-        const details = document.createElement("small");
-        details.className = "text-secondary";
-        details.textContent =
-            record.vehicle + " · " + record.date;
-
-        const cost = document.createElement("span");
-        cost.className = "text-primary fw-bold";
-        cost.textContent =
-            "₺" + record.cost.toLocaleString("tr-TR");
-
-        info.append(title, details);
-        item.append(info, cost);
-
-        expensesList.appendChild(item);
+        try {
+            const record = await apiRequest(endpoint, { method: "POST", data: readData() });
+            onSaved(record);
+            form.reset();
+            bootstrap.Modal.getInstance(byId(modalId))?.hide();
+        } catch (error) {
+            if (!redirectIfSignedOut(error)) setError(errorMessage, error.message);
+        } finally {
+            submit.disabled = false;
+        }
     });
 }
 
-
-// SETTINGS
-const logoutButton = document.getElementById("logoutButton");
-const settingsUsername = document.getElementById("settingsUsername");
-
-// Demo kullanıcı adını göster.
-const username = sessionStorage.getItem("pitstopDemoUser");
-
-settingsUsername.value = username || "Guest";
-
-// LOG OUT
-logoutButton.addEventListener("click", function() {
-
-    sessionStorage.removeItem("pitstopDemoUser");
-
-    window.location.href = "index.html";
+bindRecordForm({
+    formId: "addVehicleForm",
+    modalId: "addVehicleModal",
+    errorId: "vehicleError",
+    endpoint: "vehicles",
+    readData: () => ({
+        brand: valueOf("carBrand"),
+        model: valueOf("carModel"),
+        year: Number(valueOf("carYear")),
+        mileage: Number(valueOf("carMileage")),
+        plate: valueOf("carPlate")
+    }),
+    onSaved: addVehicle
 });
 
+bindRecordForm({
+    formId: "maintenanceForm",
+    modalId: "addMaintenanceModal",
+    errorId: "maintenanceError",
+    endpoint: "maintenance",
+    readData: () => ({
+        vehicle_id: Number(valueOf("maintenanceVehicle")),
+        service_type: valueOf("serviceType"),
+        status: valueOf("serviceStatus"),
+        service_date: valueOf("serviceDate"),
+        mileage: Number(valueOf("serviceMileage")),
+        cost: valueOf("serviceCost") || "0",
+        notes: valueOf("serviceNotes")
+    }),
+    onSaved: record => {
+        maintenanceRecords.unshift(record);
+        renderMaintenance();
+    }
+});
+
+byId("logoutButton").addEventListener("click", async event => {
+    const button = event.currentTarget;
+    button.disabled = true;
+    setError(byId("dashboardError"));
+
+    try {
+        await apiRequest("logout", { method: "POST" });
+        window.location.replace("/");
+    } catch (error) {
+        setError(byId("dashboardError"), error.message);
+        button.disabled = false;
+    }
+});
+
+async function loadDashboard() {
+    try {
+        const data = await apiRequest("dashboard");
+        byId("settingsUsername").value = data.user.nickname;
+        byId("settingsEmail").value = data.user.email;
+        for (const vehicle of data.vehicles) addVehicle(vehicle);
+        for (const record of data.maintenance) maintenanceRecords.push(record);
+        renderMaintenance();
+        byId("saveVehicle").disabled = false;
+    } catch (error) {
+        if (!redirectIfSignedOut(error)) setError(byId("dashboardError"), error.message);
+    }
+}
+
+loadDashboard();

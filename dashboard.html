@@ -27,6 +27,7 @@
 
      
     <main class="flex-grow-1 p-4" style="min-width: 0;">
+        <div id="dashboardError" class="alert alert-danger d-none" role="alert"></div>
 
        
     <section id="dashboardContent">
@@ -101,13 +102,14 @@
             Recent Maintenance
         </h5>
 
-        <div id="recentMaintenanceList" class="text-center py-4">
+        <div id="recentMaintenanceListEmpty" class="text-center py-4">
             
             <h6>No maintenance records yet</h6>
             <p class="text-secondary mb-0">
                 Your recent services will appear here.
             </p>
         </div>
+        <div id="recentMaintenanceList"></div>
 
     </div>
 </div>
@@ -121,13 +123,14 @@
                 Upcoming Maintenance
             </h5>
 
-            <div id="upcomingMaintenanceList" class="text-center py-4">
+            <div id="upcomingMaintenanceListEmpty" class="text-center py-4">
                 <i class="fa-solid fa-calendar-xmark fa-3x text-secondary mb-3"></i>
                 <h6>No upcoming maintenance</h6>
                 <p class="text-secondary mb-0">
                     Your scheduled services will appear here.
                 </p>
             </div>
+            <div id="upcomingMaintenanceList"></div>
 
         </div>
     </div>
@@ -182,13 +185,14 @@
                     Service History
                 </h5>
 
-                <div class="text-center py-5" id="serviceHistoryList">
+                <div class="text-center py-5" id="serviceHistoryListEmpty">
                     <i class="fa-solid fa-clipboard-list fa-3x text-secondary mb-3"></i>
                     <h6>No maintenance records yet</h6>
                     <p class="text-secondary mb-0">
                         Your completed services will appear here.
                     </p>
                 </div>
+                <div id="serviceHistoryList"></div>
 
             </div>
         </div>
@@ -201,13 +205,14 @@
                     Upcoming Services
                 </h5>
 
-                <div class="text-center py-5" id="scheduledServicesList">
+                <div class="text-center py-5" id="scheduledServicesListEmpty">
                     <i class="fa-solid fa-calendar fa-3x text-secondary mb-3"></i>
                     <h6>No services scheduled</h6>
                     <p class="text-secondary mb-0">
                         Your upcoming maintenance will appear here.
                     </p>
                 </div>
+                <div id="scheduledServicesList"></div>
 
             </div>
         </div>
@@ -249,7 +254,7 @@
             Expense History
         </h5>
 
-        <div id="expensesEmpty" class="text-center py-5">
+        <div id="expensesListEmpty" class="text-center py-5">
             <i class="fa-solid fa-wallet fa-3x text-secondary mb-3"></i>
             <h6>No expenses recorded yet</h6>
             <p class="text-secondary mb-0">
@@ -285,13 +290,12 @@
                     <label class="form-label text-secondary">Username</label>
                     <input type="text" id="settingsUsername"
                            class="form-control"
-                           value="Guest" disabled>
+                           disabled>
                 </div>
 
                 <div class="mb-3">
                     <label class="form-label text-secondary">Email Address</label>
-                    <input type="text" class="form-control"
-                           value="Not available" disabled>
+                    <input type="email" id="settingsEmail" class="form-control" disabled>
                 </div>
 
                 <small class="text-secondary">
@@ -387,14 +391,15 @@
 
                 <div class="modal-body">
                     <form id="addVehicleForm">
+                        <div id="vehicleError" class="alert alert-danger d-none" role="alert"></div>
                         <div class="mb-3">
                             <label for="carBrand" class="form-label">Brand</label>
-                            <input type="text" id="carBrand" class="form-control" placeholder="Audi" required>
+                            <input type="text" id="carBrand" maxlength="80" class="form-control" placeholder="Audi" required>
                         </div>
 
                         <div class="mb-3">
                             <label for="carModel" class="form-label">Model</label>
-                            <input type="text" id="carModel" class="form-control" placeholder="A3" required>
+                            <input type="text" id="carModel" maxlength="80" class="form-control" placeholder="A3" required>
                         </div>
 
                         <div class="row g-3 mb-3">
@@ -404,16 +409,16 @@
                             </div>
                             <div class="col-6">
                                 <label for="carMileage" class="form-label">Mileage (km)</label>
-                                <input type="number" id="carMileage" class="form-control" min="0" placeholder="145000" required>
+                                <input type="number" id="carMileage" class="form-control" min="0" max="999999999" placeholder="145000" required>
                             </div>
                         </div>
 
                         <div class="mb-4">
                             <label for="carPlate" class="form-label">License Plate</label>
-                            <input type="text" id="carPlate" class="form-control" placeholder="34 ABC 123" required>
+                            <input type="text" id="carPlate" maxlength="24" class="form-control" placeholder="34 ABC 123" required>
                         </div>
 
-                        <button type="submit" class="btn btn-primary w-100">Save Vehicle</button>
+                        <button id="saveVehicle" disabled type="submit" class="btn btn-primary w-100">Save Vehicle</button>
                     </form>
                 </div>
             </div>
@@ -440,13 +445,15 @@
 
             <div class="modal-body">
                 <form id="maintenanceForm">
+                    <div id="maintenanceError" class="alert alert-danger d-none" role="alert"></div>
 
 
                     <div class="mb-3">
                         <label for="maintenanceVehicle" class="form-label">Vehicle</label>
-                        <input type="text" id="maintenanceVehicle"
-                               class="form-control"
-                               placeholder="Audi A3" required>
+                        <select id="maintenanceVehicle" class="form-select" required>
+                            <option value="" selected disabled>Select vehicle</option>
+                        </select>
+                        <small id="maintenanceVehicleHint" class="text-secondary">Add a vehicle in My Garage first.</small>
                     </div>
 
 
@@ -484,7 +491,7 @@
                             <label for="serviceMileage" class="form-label">Mileage (km)</label>
                             <input type="number" id="serviceMileage"
                                    class="form-control"
-                                   min="0" placeholder="145000" required>
+                                   min="0" max="999999999" placeholder="145000" required>
                         </div>
 
                     </div>
@@ -494,7 +501,7 @@
                         <label for="serviceCost" class="form-label">Cost (₺)</label>
                         <input type="number" id="serviceCost"
                                class="form-control"
-                               min="0" step="0.01" placeholder="3200">
+                               min="0" max="99999999.99" step="0.01" placeholder="3200">
                     </div>
 
              
@@ -503,11 +510,11 @@
 
                         <textarea id="serviceNotes"
                                   class="form-control"
-                                  rows="3"
+                                  rows="3" maxlength="2000"
                                   placeholder="Additional details..."></textarea>
                     </div>
 
-                    <button type="submit" class="btn btn-primary w-100">
+                    <button id="saveMaintenance" type="submit" class="btn btn-primary w-100" disabled>
                         Save Record
                     </button>
 
@@ -521,6 +528,7 @@
 
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="api.js"></script>
     <script src="dashscript.js"></script>
 </body>
 </html>
