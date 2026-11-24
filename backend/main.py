@@ -7,27 +7,26 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
-from argon2 import PasswordHasher
-from argon2.exceptions import VerifyMismatchError
 from fastapi import FastAPI, HTTPException, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, EmailStr, Field, StringConstraints
+from pydantic import BaseModel, Field, StringConstraints
 
 from .database import DATABASE_PATH, ROOT, connect, initialize
+from .passwords import hash_password, verify_password
 
 SESSION_COOKIE = "pitstop_session"
 SESSION_LIFETIME = 7 * 24 * 60 * 60
-password_hasher = PasswordHasher()
-dummy_password_hash = password_hasher.hash(secrets.token_urlsafe(32))
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
 Mileage = Annotated[int, Field(ge=0, le=999_999_999)]
 
 
 class Login(BaseModel):
-    email: Annotated[EmailStr, Field(max_length=254)]
+    email: Annotated[str, StringConstraints(
+        strip_whitespace=True, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+    )]
     password: Annotated[str, Field(min_length=1, max_length=128)]
 
 
@@ -152,7 +151,7 @@ def set_session_cookie(response, request, token):
 @app.post("/api/register", status_code=201)
 def register(payload: Registration, request: Request, response: Response):
     email = payload.email.casefold()
-    password_hash = password_hasher.hash(payload.password)
+    password_hash = hash_password(payload.password)
     with connect(DATABASE_PATH) as db, db:
         result = db.execute(
             """
@@ -176,12 +175,16 @@ def login(payload: Login, request: Request, response: Response):
             "SELECT id, nickname, email, password_hash FROM users WHERE email = ?",
             (payload.email.casefold(),),
         ).fetchone()
-        stored_hash = user["password_hash"] if user else dummy_password_hash
-        try:
-            password_hasher.verify(stored_hash, payload.password)
-        except VerifyMismatchError:
-            raise HTTPException(401, "Incorrect email or password.") from None
-        if user is None:
+        stored_hash = user["password_hash"] if user else ""
+        if not verify_password(payload.password, stored_hash):
+            raise HTTPException(401, "Incorrect email or password.")
+        # A local password reset may have occurred while the hash was being checked.
+        db.execute("BEGIN IMMEDIATE")
+        password_is_current = db.execute(
+            "SELECT 1 FROM users WHERE id = ? AND password_hash = ?",
+            (user["id"], stored_hash),
+        ).fetchone()
+        if not password_is_current:
             raise HTTPException(401, "Incorrect email or password.")
         token = start_session(db, user["id"], request)
     set_session_cookie(response, request, token)
