@@ -7,7 +7,7 @@ from decimal import Decimal
 from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
-from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi import FastAPI, HTTPException, Path as ApiPath, Request, Response
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
@@ -21,6 +21,7 @@ SESSION_LIFETIME = 7 * 24 * 60 * 60
 
 ShortText = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=80)]
 Mileage = Annotated[int, Field(ge=0, le=999_999_999)]
+RecordID = Annotated[int, ApiPath(gt=0, le=2**63 - 1)]
 
 
 class Login(BaseModel):
@@ -43,7 +44,11 @@ class Vehicle(BaseModel):
     plate: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=24)]
 
 
-class Maintenance(BaseModel):
+class VehicleRecord(Vehicle):
+    id: int
+
+
+class MaintenanceFields(BaseModel):
     vehicle_id: Annotated[int, Field(gt=0, le=2**63 - 1)]
     service_type: Literal[
         "Oil & Filter Change",
@@ -55,8 +60,16 @@ class Maintenance(BaseModel):
     status: Literal["completed", "scheduled"]
     service_date: date
     mileage: Mileage
-    cost: Annotated[Decimal, Field(ge=0, max_digits=10, decimal_places=2)] = Decimal("0")
     notes: Annotated[str, StringConstraints(strip_whitespace=True, max_length=2000)] = ""
+
+
+class Maintenance(MaintenanceFields):
+    cost: Annotated[Decimal, Field(ge=0, max_digits=10, decimal_places=2)] = Decimal("0")
+
+
+class MaintenanceRecord(MaintenanceFields):
+    id: int
+    cost_cents: int
 
 
 @asynccontextmanager
@@ -74,7 +87,7 @@ async def protect_api(request: Request, call_next):
     origin = request.headers.get("origin")
 
     # Reject cross-origin writes from browsers, including other subdomains.
-    if is_api and request.method == "POST" and origin is not None:
+    if is_api and request.method in {"POST", "PUT", "DELETE"} and origin is not None:
         try:
             source = urlsplit(origin)
             same_host = source.netloc.lower() == request.url.netloc.lower()
@@ -148,7 +161,7 @@ def set_session_cookie(response, request, token):
     )
 
 
-@app.post("/api/register", status_code=201)
+@app.post("/api/register", status_code=201, tags=["Account"])
 def register(payload: Registration, request: Request, response: Response):
     email = payload.email.casefold()
     password_hash = hash_password(payload.password)
@@ -168,7 +181,7 @@ def register(payload: Registration, request: Request, response: Response):
     return {"id": user_id, "nickname": payload.nickname, "email": email}
 
 
-@app.post("/api/login")
+@app.post("/api/login", tags=["Account"])
 def login(payload: Login, request: Request, response: Response):
     with connect(DATABASE_PATH) as db, db:
         user = db.execute(
@@ -191,7 +204,7 @@ def login(payload: Login, request: Request, response: Response):
     return {"id": user["id"], "nickname": user["nickname"], "email": user["email"]}
 
 
-@app.post("/api/logout", status_code=204)
+@app.post("/api/logout", status_code=204, tags=["Account"])
 def logout(request: Request):
     token = request.cookies.get(SESSION_COOKIE)
     if token:
@@ -204,32 +217,47 @@ def logout(request: Request):
     return response
 
 
-@app.get("/api/dashboard")
+def vehicles_for_user(db, user_id):
+    rows = db.execute(
+        "SELECT id, brand, model, year, mileage, plate FROM vehicles WHERE user_id = ? ORDER BY id",
+        (user_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+def maintenance_for_user(db, user_id):
+    rows = db.execute(
+        """
+        SELECT maintenance.* FROM maintenance
+        JOIN vehicles ON vehicles.id = maintenance.vehicle_id
+        WHERE vehicles.user_id = ?
+        ORDER BY maintenance.id DESC
+        """,
+        (user_id,),
+    ).fetchall()
+    return [dict(row) for row in rows]
+
+
+@app.get("/api/dashboard", tags=["Dashboard"])
 def get_dashboard(request: Request):
     with connect(DATABASE_PATH) as db, db:
         db.execute("BEGIN")
         user = require_user(db, request)
-        vehicles = db.execute(
-            "SELECT id, brand, model, year, mileage, plate FROM vehicles WHERE user_id = ? ORDER BY id",
-            (user["id"],),
-        ).fetchall()
-        records = db.execute(
-            """
-            SELECT maintenance.* FROM maintenance
-            JOIN vehicles ON vehicles.id = maintenance.vehicle_id
-            WHERE vehicles.user_id = ?
-            ORDER BY maintenance.id DESC
-            """,
-            (user["id"],),
-        ).fetchall()
-    return {
-        "user": dict(user),
-        "vehicles": [dict(vehicle) for vehicle in vehicles],
-        "maintenance": [dict(record) for record in records],
-    }
+        return {
+            "user": dict(user),
+            "vehicles": vehicles_for_user(db, user["id"]),
+            "maintenance": maintenance_for_user(db, user["id"]),
+        }
 
 
-@app.post("/api/vehicles", status_code=201)
+@app.get("/api/vehicles", tags=["Vehicles"], response_model=list[VehicleRecord])
+def list_vehicles(request: Request):
+    with connect(DATABASE_PATH) as db:
+        user = require_user(db, request)
+        return vehicles_for_user(db, user["id"])
+
+
+@app.post("/api/vehicles", status_code=201, tags=["Vehicles"], response_model=VehicleRecord)
 def add_vehicle(payload: Vehicle, request: Request):
     vehicle = payload.model_dump()
     with connect(DATABASE_PATH) as db, db:
@@ -237,43 +265,112 @@ def add_vehicle(payload: Vehicle, request: Request):
         result = db.execute(
             """
             INSERT INTO vehicles (user_id, brand, model, year, mileage, plate)
-            VALUES (?, ?, ?, ?, ?, ?)
+            VALUES (:user_id, :brand, :model, :year, :mileage, :plate)
             """,
-            (user["id"], payload.brand, payload.model, payload.year, payload.mileage, payload.plate),
+            {**vehicle, "user_id": user["id"]},
         )
     return {"id": result.lastrowid, **vehicle}
 
 
-@app.post("/api/maintenance", status_code=201)
+@app.put("/api/vehicles/{vehicle_id}", tags=["Vehicles"], response_model=VehicleRecord)
+def update_vehicle(vehicle_id: RecordID, payload: Vehicle, request: Request):
+    vehicle = payload.model_dump()
+    with connect(DATABASE_PATH) as db, db:
+        user = require_user(db, request)
+        result = db.execute(
+            """
+            UPDATE vehicles
+            SET brand = :brand, model = :model, year = :year, mileage = :mileage, plate = :plate
+            WHERE id = :id AND user_id = :user_id
+            """,
+            {**vehicle, "id": vehicle_id, "user_id": user["id"]},
+        )
+        if result.rowcount == 0:
+            raise HTTPException(404, "Vehicle not found.")
+    return {"id": vehicle_id, **vehicle}
+
+
+@app.delete("/api/vehicles/{vehicle_id}", status_code=204, tags=["Vehicles"])
+def delete_vehicle(vehicle_id: RecordID, request: Request):
+    """Delete a vehicle and its maintenance records."""
+    with connect(DATABASE_PATH) as db, db:
+        user = require_user(db, request)
+        result = db.execute(
+            "DELETE FROM vehicles WHERE id = ? AND user_id = ?",
+            (vehicle_id, user["id"]),
+        )
+        if result.rowcount == 0:
+            raise HTTPException(404, "Vehicle not found.")
+    return Response(status_code=204)
+
+
+@app.get("/api/maintenance", tags=["Maintenance"], response_model=list[MaintenanceRecord])
+def list_maintenance(request: Request):
+    with connect(DATABASE_PATH) as db:
+        user = require_user(db, request)
+        return maintenance_for_user(db, user["id"])
+
+
+def maintenance_values(payload: Maintenance):
+    return {
+        **payload.model_dump(mode="json", exclude={"cost"}),
+        "cost_cents": int(payload.cost * 100),
+    }
+
+
+@app.post("/api/maintenance", status_code=201, tags=["Maintenance"], response_model=MaintenanceRecord)
 def add_maintenance(payload: Maintenance, request: Request):
-    service_date = payload.service_date.isoformat()
-    cost_cents = int(payload.cost * 100)
+    record = maintenance_values(payload)
     with connect(DATABASE_PATH) as db, db:
         user = require_user(db, request)
         result = db.execute(
             """
             INSERT INTO maintenance (vehicle_id, service_type, status, service_date, mileage, cost_cents, notes)
-            SELECT id, ?, ?, ?, ?, ?, ? FROM vehicles WHERE id = ? AND user_id = ?
+            SELECT id, :service_type, :status, :service_date, :mileage, :cost_cents, :notes
+            FROM vehicles WHERE id = :vehicle_id AND user_id = :user_id
             """,
-            (
-                payload.service_type,
-                payload.status,
-                service_date,
-                payload.mileage,
-                cost_cents,
-                payload.notes,
-                payload.vehicle_id,
-                user["id"],
-            ),
+            {**record, "user_id": user["id"]},
         )
         if result.rowcount == 0:
             raise HTTPException(404, "Vehicle not found.")
-    return {
-        **payload.model_dump(exclude={"cost"}),
-        "id": result.lastrowid,
-        "service_date": service_date,
-        "cost_cents": cost_cents,
-    }
+    return {"id": result.lastrowid, **record}
+
+
+@app.put("/api/maintenance/{record_id}", tags=["Maintenance"], response_model=MaintenanceRecord)
+def update_maintenance(record_id: RecordID, payload: Maintenance, request: Request):
+    record = maintenance_values(payload)
+    with connect(DATABASE_PATH) as db, db:
+        user = require_user(db, request)
+        result = db.execute(
+            """
+            UPDATE maintenance
+            SET vehicle_id = :vehicle_id, service_type = :service_type, status = :status,
+                service_date = :service_date, mileage = :mileage, cost_cents = :cost_cents, notes = :notes
+            WHERE id = :id
+              AND vehicle_id IN (SELECT id FROM vehicles WHERE user_id = :user_id)
+              AND EXISTS (SELECT 1 FROM vehicles WHERE id = :vehicle_id AND user_id = :user_id)
+            """,
+            {**record, "id": record_id, "user_id": user["id"]},
+        )
+        if result.rowcount == 0:
+            raise HTTPException(404, "Maintenance record or vehicle not found.")
+    return {"id": record_id, **record}
+
+
+@app.delete("/api/maintenance/{record_id}", status_code=204, tags=["Maintenance"])
+def delete_maintenance(record_id: RecordID, request: Request):
+    with connect(DATABASE_PATH) as db, db:
+        user = require_user(db, request)
+        result = db.execute(
+            """
+            DELETE FROM maintenance
+            WHERE id = ? AND vehicle_id IN (SELECT id FROM vehicles WHERE user_id = ?)
+            """,
+            (record_id, user["id"]),
+        )
+        if result.rowcount == 0:
+            raise HTTPException(404, "Maintenance record not found.")
+    return Response(status_code=204)
 
 
 @app.get("/", include_in_schema=False)

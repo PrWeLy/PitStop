@@ -26,6 +26,27 @@ python3 -m venv .venv
 
 Bulut önizlemesi için sunucu komutuna `--host 0.0.0.0` ekle ve 8000 numaralı portu aç.
 
+## API endpoint’leri
+
+[/docs](http://localhost:8000/docs) üzerinden `POST /api/login` veya `POST /api/register` ile oturum aç. Tarayıcı oturum çerezini sonraki isteklere ekler.
+
+| Yöntem | Yol | İşlem |
+| --- | --- | --- |
+| POST | `/api/register` | Hesap oluştur |
+| POST | `/api/login` | Giriş yap |
+| POST | `/api/logout` | Oturumu kapat |
+| GET | `/api/dashboard` | Hesabı, araçları ve bakım kayıtlarını getir |
+| GET | `/api/vehicles` | Araçları listele |
+| POST | `/api/vehicles` | Araç ekle |
+| PUT | `/api/vehicles/{vehicle_id}` | Araç kaydını güncelle |
+| DELETE | `/api/vehicles/{vehicle_id}` | Aracı ve ona bağlı bakım kayıtlarını sil |
+| GET | `/api/maintenance` | Bakımları listele |
+| POST | `/api/maintenance` | Bakım kaydı ekle |
+| PUT | `/api/maintenance/{record_id}` | Bakım kaydını güncelle |
+| DELETE | `/api/maintenance/{record_id}` | Bakım kaydını sil |
+
+`PUT` için aynı kaydın `POST` isteğindeki alanları gönder. Bakım maliyeti istekte `cost` alanında TL, yanıtta `cost_cents` alanında kuruş olarak gösterilir.
+
 ## Veritabanı ve eski hesaplar
 
 SQLite dosyası ilk açılışta `data/pitstop.sqlite3` yolunda oluşur. Farklı bir konum için `PITSTOP_DB_PATH` ortam değişkenini kullan.
